@@ -1,6 +1,6 @@
 [submodule "chia-blockchain-gui"]
 	path = chia-blockchain-gui
-	url = https://github.com/theNamesdao/namesdao-wallet-gui
+	url = https://github.com/theNamesdao/namesdao-wallet-gui.git
 	branch = main
 [submodule "mozilla-ca"]
 	path = mozilla-ca
