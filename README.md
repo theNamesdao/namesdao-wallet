@@ -1,6 +1,6 @@
-# Namesdao-wallet, a fork of chia-blockchain
+# Namesdao .xch Wallet, a fork of chia-blockchain
 
-Namesdao-wallet is a fork of the Chia reference wallet, which adds support for Namesdao .xch names and outgoing memo's for XCH transactions.
+Namesdao .xch Wallet is a fork of the Chia reference wallet, which adds support for Namesdao .xch names and outgoing memo's for XCH transactions.
 
 Namesdao wallet is from Namesdao, a DAO which is not affiliated with the company Chia Network.
 
@@ -16,8 +16,8 @@ by typing `python3`.
 
 ```# Prerequisite: git
 
-git clone https://github.com/Chia-Network/chia-blockchain.git -b latest --recurse-submodules
-cd chia-blockchain
+git clone https://github.com/theNamesdao/namesdao-wallet.git --recurse-submodules
+cd namesdao-wallet
 
 # This installs compatible Python modules
 sh install.sh
