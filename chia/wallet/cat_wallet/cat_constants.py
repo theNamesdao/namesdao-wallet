@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+AIR = {
+    "asset_id": "824c71e37ac660006e03f7884561e7a124d930460ae1506a9c234c06ebc6aa1d",
+    "name": "Air by Namesdao",
+    "symbol": "AIR",
+}
+
+NAME = {
+    "asset_id": "4c4380af7d15c896d9e6266f322ac494c398803032eef56f2ab65877956d007f",
+    "name": "Namesdao Name",
+    "symbol": "NAME",
+}
+
 SPACEBUCKS = {
     "asset_id": "a628c1c2c6fcb74d53746157e438e108eab5c0bb3e5c80ff9b1910b3e4832913",
     "name": "Spacebucks",
@@ -25,6 +37,8 @@ CHIA_HOLIDAY_TOKEN = {
 }
 
 DEFAULT_CATS = {
+    AIR["asset_id"]: AIR,
+    NAME["asset_id"]: NAME,
     SPACEBUCKS["asset_id"]: SPACEBUCKS,
     MARMOT["asset_id"]: MARMOT,
     STABLY_USDS["asset_id"]: STABLY_USDS,
