@@ -10,7 +10,7 @@ by typing `python3`.
 
 
 
-##Install from source
+## Install from source
 
 *This instruction is for MacOS, Ubuntu, CentOS, RedHat, WSL2, Amazon Linux 2 and possibly *NIX like OSes.
 
@@ -43,6 +43,14 @@ Building Timelords and VDFs is for sophisticated users, in most environments.
 Chia Network and additional volunteers are running sufficient Timelords
 for consensus.
 
+
+## Hot-Reloading for Development
+
+"it does support hot reloading, but it sorta depends which package the modified code belongs to. If you're modifying code in packages/gui the hot reloading should just work. If you're making changes in the other packages, you can setup an npm run build:watch in those package directories
+so for example, if you change something in WalletSend.tsx which lives in packages/wallets, you'll need to rebuild the wallet package either by manually running npm run build or npm run build:watch (in packages/wallet)
+EDITED
+the core and wallets packages are fairly large, so the rebuild does take a bit of time
+and yes, to @emlowe's point, you need to be running the GUI in dev mode via npm run dev" - paninaro
 
 ## Chia blockchain
 
