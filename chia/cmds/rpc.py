@@ -52,7 +52,7 @@ def get_routes(service: str, config: Dict[str, Any]) -> Dict[str, Any]:
     return asyncio.run(call_endpoint(service, "get_routes", {}, config))
 
 
-@click.group("rpc", short_help="RPC Client")
+@click.group("rpc", help="RPC Client")
 def rpc_cmd() -> None:
     pass
 
@@ -136,7 +136,7 @@ def create_commands() -> None:
                     endpoint = endpoint[1:]
                 print_result(asyncio.run(call_endpoint(service, endpoint, request_json, config)))
             except Exception as e:
-                sys.exit(e)
+                sys.exit(str(e))
 
 
 create_commands()

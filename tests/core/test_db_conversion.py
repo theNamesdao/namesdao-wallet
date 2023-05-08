@@ -1,20 +1,22 @@
-import pytest
+from __future__ import annotations
+
 import random
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
-from tests.setup_nodes import test_constants
-from tests.util.temp_file import TempFile
+import pytest
 
-from chia.types.blockchain_format.sized_bytes import bytes32
-from chia.util.ints import uint64
 from chia.cmds.db_upgrade_func import convert_v1_to_v2
-from chia.util.db_wrapper import DBWrapper2
+from chia.consensus.blockchain import Blockchain
+from chia.consensus.multiprocess_validation import PreValidationResult
 from chia.full_node.block_store import BlockStore
 from chia.full_node.coin_store import CoinStore
 from chia.full_node.hint_store import HintStore
-from chia.consensus.blockchain import Blockchain
-from chia.consensus.multiprocess_validation import PreValidationResult
+from chia.simulator.block_tools import test_constants
+from chia.types.blockchain_format.sized_bytes import bytes32
+from chia.util.db_wrapper import DBWrapper2
+from chia.util.ints import uint64
+from tests.util.temp_file import TempFile
 
 
 def rand_bytes(num) -> bytes:
@@ -28,7 +30,6 @@ class TestDbUpgrade:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("with_hints", [True, False])
     async def test_blocks(self, default_1000_blocks, with_hints: bool):
-
         blocks = default_1000_blocks
 
         hints: List[Tuple[bytes32, bytes]] = []
@@ -52,7 +53,6 @@ class TestDbUpgrade:
             hints.append((coin_id, hint))
 
         with TempFile() as in_file, TempFile() as out_file:
-
             db_wrapper1 = await DBWrapper2.create(
                 database=in_file,
                 reader_count=1,
@@ -77,7 +77,7 @@ class TestDbUpgrade:
                 for block in blocks:
                     # await _validate_and_add_block(bc, block)
                     results = PreValidationResult(None, uint64(1), None, False)
-                    result, err, _ = await bc.receive_block(block, results)
+                    result, err, _ = await bc.add_block(block, results)
                     assert err is None
             finally:
                 await db_wrapper1.close()

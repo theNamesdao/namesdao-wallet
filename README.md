@@ -4,6 +4,22 @@ Namesdao .xch Wallet is a fork of the Chia reference wallet, which adds support 
 
 Namesdao wallet is from Namesdao, a DAO which is not affiliated with the company Chia Network.
 
+![GitHub contributors](https://img.shields.io/github/contributors/Chia-Network/chia-blockchain?logo=GitHub)
+
+Chia is a modern cryptocurrency built from scratch, designed to be efficient, decentralized, and secure. Here are some of the features and benefits:
+* [Proof of space and time](https://docs.google.com/document/d/1tmRIb7lgi4QfKkNaxuKOBHRmwbVlGL4f7EsBDr_5xZE/edit) based consensus which allows anyone to farm with commodity hardware
+* Very easy to use full node and farmer GUI and cli (thousands of nodes active on mainnet)
+* [Chia seeder](https://github.com/Chia-Network/chia-blockchain/wiki/Chia-Seeder-User-Guide), which maintains a list of reliable nodes within the Chia network via a built-in DNS server.
+* Simplified UTXO based transaction model, with small on-chain state
+* Lisp-style Turing-complete functional [programming language](https://chialisp.com/) for money related use cases
+* BLS keys and aggregate signatures (only one signature per block)
+* [Pooling protocol](https://github.com/Chia-Network/chia-blockchain/wiki/Pooling-User-Guide) that allows farmers to have control of making blocks
+* Support for light clients with fast, objective syncing
+* A growing community of farmers and developers around the world
+
+Please check out the [Chia website](https://www.chia.net/), the [wiki](https://github.com/Chia-Network/chia-blockchain/wiki), and [FAQ](https://github.com/Chia-Network/chia-blockchain/wiki/FAQ) for
+information on this project.
+>>>>>>> .merge_file_OxMWgj
 
 Python 3.7+ is required. Make sure your default python version is >=3.7
 by typing `python3`.

@@ -27,7 +27,9 @@ from chia.protocols.harvester_protocol import (
     PlotSyncResponse,
     PlotSyncStart,
 )
-from chia.server.ws_connection import ProtocolMessageTypes, WSChiaConnection, make_msg
+from chia.protocols.protocol_message_types import ProtocolMessageTypes
+from chia.server.outbound_message import make_msg
+from chia.server.ws_connection import WSChiaConnection
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.util.ints import int16, uint32, uint64
 from chia.util.misc import get_list_or_len
@@ -347,8 +349,8 @@ class Receiver:
         return {
             "connection": {
                 "node_id": self._connection.peer_node_id,
-                "host": self._connection.peer_host,
-                "port": self._connection.peer_port,
+                "host": self._connection.peer_info.host,
+                "port": self._connection.peer_info.port,
             },
             "plots": get_list_or_len(list(self._plots.values()), counts_only),
             "failed_to_open_filenames": get_list_or_len(self._invalid, counts_only),

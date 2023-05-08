@@ -14,15 +14,17 @@ import pytest
 from blspy import G1Element
 
 from chia.farmer.farmer_api import Farmer
-from chia.harvester.harvester_api import Harvester
+from chia.harvester.harvester import Harvester
 from chia.plot_sync.receiver import Receiver
 from chia.plot_sync.sender import Sender
 from chia.plot_sync.util import Constants
 from chia.plotting.manager import PlotManager
 from chia.plotting.util import PlotInfo
 from chia.protocols.harvester_protocol import PlotSyncError, PlotSyncResponse
+from chia.protocols.protocol_message_types import ProtocolMessageTypes
+from chia.server.outbound_message import make_msg
 from chia.server.start_service import Service
-from chia.server.ws_connection import ProtocolMessageTypes, WSChiaConnection, make_msg
+from chia.server.ws_connection import WSChiaConnection
 from chia.simulator.block_tools import BlockTools
 from chia.simulator.time_out_assert import time_out_assert
 from chia.types.blockchain_format.sized_bytes import bytes32
@@ -251,7 +253,7 @@ async def create_test_runner(
         receiver.simulate_error = 0  # type: ignore[attr-defined]
         receiver.message_counter = 0  # type: ignore[attr-defined]
         receiver.original_process = receiver._process  # type: ignore[attr-defined]
-        receiver._process = functools.partial(_testable_process, receiver)  # type: ignore[assignment]
+        receiver._process = functools.partial(_testable_process, receiver)  # type: ignore[method-assign]
     return TestRunner(harvesters, farmer, event_loop)
 
 

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Optional, Tuple
 
 from blspy import PrivateKey
 
-from chia.cmds.init_funcs import create_all_ssl
 from chia.consensus.coinbase import create_puzzlehash_for_pk
 from chia.daemon.server import WebSocketServer, daemon_launch_lock_path
 from chia.simulator.full_node_simulator import FullNodeSimulator
@@ -20,6 +18,7 @@ from chia.simulator.ssl_certs import (
     get_next_private_ca_cert_and_key,
 )
 from chia.simulator.start_simulator import async_main as start_simulator_main
+from chia.ssl.create_ssl import create_all_ssl
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.util.bech32m import encode_puzzle_hash
 from chia.util.config import create_default_chia_config, load_config, save_config
@@ -136,7 +135,6 @@ async def get_full_chia_simulator(
         keychain = Keychain()
 
     with Lockfile.create(daemon_launch_lock_path(chia_root)):
-
         mnemonic, fingerprint = mnemonic_fingerprint(keychain)
 
         ssl_ca_cert_and_key_wrapper: SSLTestCollateralWrapper[
@@ -158,13 +156,8 @@ async def get_full_chia_simulator(
         ca_crt_path = chia_root / config["private_ssl_ca"]["crt"]
         ca_key_path = chia_root / config["private_ssl_ca"]["key"]
 
-        shutdown_event = asyncio.Event()
-        ws_server = WebSocketServer(chia_root, ca_crt_path, ca_key_path, crt_path, key_path, shutdown_event)
+        ws_server = WebSocketServer(chia_root, ca_crt_path, ca_key_path, crt_path, key_path)
         await ws_server.setup_process_global_state()
-        await ws_server.start()  # type: ignore[no-untyped-call]
-
-        async for simulator in start_simulator(chia_root, automated_testing):
-            yield simulator, chia_root, config, mnemonic, fingerprint, keychain
-
-        await ws_server.stop()
-        await shutdown_event.wait()  # wait till shutdown is complete
+        async with ws_server.run():
+            async for simulator in start_simulator(chia_root, automated_testing):
+                yield simulator, chia_root, config, mnemonic, fingerprint, keychain

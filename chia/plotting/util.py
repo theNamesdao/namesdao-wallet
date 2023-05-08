@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from blspy import G1Element, PrivateKey
 from chiapos import DiskProver
+from typing_extensions import final
 
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.util.config import load_config, lock_and_load_config, save_config
@@ -66,6 +67,23 @@ class PlotRefreshResult:
     duration: float = 0
 
 
+@final
+@dataclass
+class Params:
+    size: int
+    num: int
+    buffer: int
+    num_threads: int
+    buckets: int
+    tmp_dir: Path
+    tmp2_dir: Optional[Path]
+    final_dir: Path
+    plotid: Optional[str]
+    memo: Optional[str]
+    nobitfield: bool
+    stripe_size: int = 65536
+
+
 def get_plot_directories(root_path: Path, config: Dict = None) -> List[str]:
     if config is None:
         config = load_config(root_path, "config.yaml")
@@ -78,7 +96,11 @@ def get_plot_filenames(root_path: Path) -> Dict[Path, List[Path]]:
     config = load_config(root_path, "config.yaml")
     recursive_scan: bool = config["harvester"].get("recursive_plot_scan", False)
     for directory_name in get_plot_directories(root_path, config):
-        directory = Path(directory_name).resolve()
+        try:
+            directory = Path(directory_name).resolve()
+        except (OSError, RuntimeError):
+            log.exception(f"Failed to resolve {directory_name}")
+            continue
         all_files[directory] = get_filenames(directory, recursive_scan)
     return all_files
 

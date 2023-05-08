@@ -1,30 +1,28 @@
 from __future__ import annotations
 
-from typing import AsyncIterator, List, Tuple
+from typing import List, Tuple
 
 import pytest
 import pytest_asyncio
 
 from chia.cmds.units import units
+from chia.consensus.block_record import BlockRecord
 from chia.consensus.block_rewards import calculate_base_farmer_reward, calculate_pool_reward
 from chia.full_node.full_node import FullNode
+from chia.server.outbound_message import NodeType
 from chia.server.server import ChiaServer
 from chia.server.start_service import Service
-from chia.simulator.block_tools import BlockTools, create_block_tools_async
+from chia.simulator.block_tools import BlockTools, create_block_tools_async, test_constants
 from chia.simulator.full_node_simulator import FullNodeSimulator
+from chia.simulator.keyring import TempKeyring
+from chia.simulator.setup_nodes import SimulatorsAndWallets, setup_full_system
+from chia.simulator.setup_services import setup_full_node
 from chia.simulator.simulator_protocol import FarmNewBlockProtocol, GetAllCoinsProtocol, ReorgProtocol
 from chia.simulator.time_out_assert import time_out_assert
+from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.types.peer_info import PeerInfo
 from chia.util.ints import uint16, uint32, uint64
 from chia.wallet.wallet_node import WalletNode
-from tests.setup_nodes import (
-    SimulatorsAndWallets,
-    setup_full_node,
-    setup_full_system,
-    setup_simulators_and_wallets,
-    test_constants,
-)
-from tests.util.keyring import TempKeyring
 
 test_constants_modified = test_constants.replace(
     **{
@@ -50,25 +48,19 @@ test_constants_modified = test_constants.replace(
 async def extra_node(self_hostname):
     with TempKeyring() as keychain:
         b_tools = await create_block_tools_async(constants=test_constants_modified, keychain=keychain)
-        async for _ in setup_full_node(
+        async for service in setup_full_node(
             test_constants_modified,
             "blockchain_test_3.db",
             self_hostname,
             b_tools,
             db_version=1,
         ):
-            yield _
+            yield service._api
 
 
 @pytest_asyncio.fixture(scope="function")
 async def simulation(bt):
     async for _ in setup_full_system(test_constants_modified, bt, db_version=1):
-        yield _
-
-
-@pytest_asyncio.fixture(scope="function")
-async def one_wallet_node() -> AsyncIterator[SimulatorsAndWallets]:
-    async for _ in setup_simulators_and_wallets(simulator_count=1, wallet_count=1, dic={}):
         yield _
 
 
@@ -84,7 +76,7 @@ class TestSimulation:
         # Connect node 1 to node 2
         connected: bool = await server1.start_client(PeerInfo(self_hostname, node2_port))
         assert connected, f"node1 was unable to connect to node2 on port {node2_port}"
-        assert len(server1.get_full_node_outgoing_connections()) >= 1
+        assert len(server1.get_connections(NodeType.FULL_NODE, outbound=True)) >= 1
 
         # Connect node3 to node1 and node2 - checks come later
         node3: Service[FullNode] = extra_node
@@ -93,7 +85,7 @@ class TestSimulation:
         assert connected, f"server3 was unable to connect to node1 on port {node1_port}"
         connected = await server3.start_client(PeerInfo(self_hostname, node2_port))
         assert connected, f"server3 was unable to connect to node2 on port {node2_port}"
-        assert len(server3.get_full_node_outgoing_connections()) >= 2
+        assert len(server3.get_connections(NodeType.FULL_NODE, outbound=True)) >= 2
 
         # wait up to 10 mins for node2 to sync the chain to height 7
         await time_out_assert(600, node2.full_node.blockchain.get_peak_height, 7)
@@ -213,17 +205,17 @@ class TestSimulation:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(argnames="count", argvalues=[0, 1, 2, 5, 10])
-    async def test_simulation_process_blocks(
+    async def test_simulation_farm_blocks_to_puzzlehash(
         self,
         count,
-        one_wallet_node: SimulatorsAndWallets,
+        simulator_and_wallet: SimulatorsAndWallets,
     ):
-        [[full_node_api], _, _] = one_wallet_node
+        [[full_node_api], _, _] = simulator_and_wallet
 
         # Starting at the beginning.
         assert full_node_api.full_node.blockchain.get_peak_height() is None
 
-        await full_node_api.process_blocks(count=count)
+        await full_node_api.farm_blocks_to_puzzlehash(count=count)
 
         # The requested number of blocks had been processed.
         expected_height = None if count == 0 else count
@@ -233,12 +225,13 @@ class TestSimulation:
     @pytest.mark.parametrize(argnames="count", argvalues=[0, 1, 2, 5, 10])
     async def test_simulation_farm_blocks(
         self,
+        self_hostname: str,
         count,
-        one_wallet_node: SimulatorsAndWallets,
+        simulator_and_wallet: SimulatorsAndWallets,
     ):
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute error below.
         assert wallet_node.wallet_state_manager is not None
@@ -248,7 +241,7 @@ class TestSimulation:
         # Starting at the beginning.
         assert full_node_api.full_node.blockchain.get_peak_height() is None
 
-        rewards = await full_node_api.farm_blocks(count=count, wallet=wallet)
+        rewards = await full_node_api.farm_blocks_to_wallet(count=count, wallet=wallet)
 
         # The requested number of blocks had been processed plus 1 to handle the final reward
         # transactions in the case of a non-zero count.
@@ -267,6 +260,21 @@ class TestSimulation:
         confirmed_balance = await wallet.get_confirmed_balance()
         assert [unconfirmed_balance, confirmed_balance] == [rewards, rewards]
 
+        # Test that we can change the time per block
+        new_time_per_block = uint64(1000)
+        full_node_api.time_per_block = new_time_per_block
+        if count > 0:
+            peak = full_node_api.full_node.blockchain.get_peak()
+            assert isinstance(peak, BlockRecord)
+            start_time = peak.timestamp
+            await full_node_api.farm_new_transaction_block(FarmNewBlockProtocol(bytes32([0] * 32)))
+            peak = full_node_api.full_node.blockchain.get_peak()
+            assert isinstance(peak, BlockRecord)
+            end_time = peak.timestamp
+            assert isinstance(start_time, uint64)
+            assert isinstance(end_time, uint64)
+            assert end_time - start_time >= new_time_per_block
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         argnames=["amount", "coin_count"],
@@ -282,20 +290,21 @@ class TestSimulation:
     )
     async def test_simulation_farm_rewards(
         self,
+        self_hostname: str,
         amount: int,
         coin_count: int,
-        one_wallet_node: SimulatorsAndWallets,
+        simulator_and_wallet: SimulatorsAndWallets,
     ):
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute error below.
         assert wallet_node.wallet_state_manager is not None
 
         wallet = wallet_node.wallet_state_manager.main_wallet
 
-        rewards = await full_node_api.farm_rewards(amount=amount, wallet=wallet)
+        rewards = await full_node_api.farm_rewards_to_wallet(amount=amount, wallet=wallet)
 
         # At least the requested amount was farmed.
         assert rewards >= amount
@@ -312,13 +321,14 @@ class TestSimulation:
     @pytest.mark.asyncio
     async def test_wait_transaction_records_entered_mempool(
         self,
-        one_wallet_node: SimulatorsAndWallets,
+        self_hostname: str,
+        simulator_and_wallet: SimulatorsAndWallets,
     ) -> None:
         repeats = 50
-        tx_amount = 1
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        tx_amount = uint64(1)
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute hint issue below.
         assert wallet_node.wallet_state_manager is not None
@@ -326,7 +336,7 @@ class TestSimulation:
         wallet = wallet_node.wallet_state_manager.main_wallet
 
         # generate some coins for repetitive testing
-        await full_node_api.farm_rewards(amount=repeats * tx_amount, wallet=wallet)
+        await full_node_api.farm_rewards_to_wallet(amount=repeats * tx_amount, wallet=wallet)
         coins = await full_node_api.create_coins_with_amounts(amounts=[tx_amount] * repeats, wallet=wallet)
         assert len(coins) == repeats
 
@@ -349,15 +359,16 @@ class TestSimulation:
     @pytest.mark.asyncio
     async def test_process_transactions(
         self,
-        one_wallet_node: SimulatorsAndWallets,
+        self_hostname: str,
+        simulator_and_wallet: SimulatorsAndWallets,
         records_or_bundles_or_coins: str,
     ) -> None:
         repeats = 20
-        tx_amount = 1
+        tx_amount = uint64(1)
         tx_per_repeat = 2
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute hint issue below.
         assert wallet_node.wallet_state_manager is not None
@@ -365,7 +376,7 @@ class TestSimulation:
         wallet = wallet_node.wallet_state_manager.main_wallet
 
         # generate some coins for repetitive testing
-        await full_node_api.farm_rewards(amount=tx_amount * repeats * tx_per_repeat, wallet=wallet)
+        await full_node_api.farm_rewards_to_wallet(amount=tx_amount * repeats * tx_per_repeat, wallet=wallet)
         all_coins = await full_node_api.create_coins_with_amounts(
             amounts=[tx_amount] * repeats * tx_per_repeat, wallet=wallet
         )
@@ -412,28 +423,32 @@ class TestSimulation:
     @pytest.mark.parametrize(
         argnames="amounts",
         argvalues=[
-            *[pytest.param([1] * n, id=f"1 mojo x {n}") for n in [0, 1, 10, 49, 51, 103]],
-            *[pytest.param(list(range(1, n + 1)), id=f"incrementing x {n}") for n in [1, 10, 49, 51, 103]],
+            *[pytest.param([uint64(1)] * n, id=f"1 mojo x {n}") for n in [0, 1, 10, 49, 51, 103]],
+            *[
+                pytest.param(list(uint64(x) for x in range(1, n + 1)), id=f"incrementing x {n}")
+                for n in [1, 10, 49, 51, 103]
+            ],
         ],
     )
     async def test_create_coins_with_amounts(
         self,
-        amounts: List[int],
-        one_wallet_node: SimulatorsAndWallets,
+        self_hostname: str,
+        amounts: List[uint64],
+        simulator_and_wallet: SimulatorsAndWallets,
     ) -> None:
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute hint issue below.
         assert wallet_node.wallet_state_manager is not None
 
         wallet = wallet_node.wallet_state_manager.main_wallet
 
-        await full_node_api.farm_rewards(amount=sum(amounts), wallet=wallet)
+        await full_node_api.farm_rewards_to_wallet(amount=sum(amounts), wallet=wallet)
         # Get some more coins.  The creator helper doesn't get you all the coins you
         # need yet.
-        await full_node_api.farm_blocks(count=2, wallet=wallet)
+        await full_node_api.farm_blocks_to_wallet(count=2, wallet=wallet)
         coins = await full_node_api.create_coins_with_amounts(amounts=amounts, wallet=wallet)
 
         assert sorted(coin.amount for coin in coins) == sorted(amounts)
@@ -442,20 +457,22 @@ class TestSimulation:
     @pytest.mark.parametrize(
         argnames="amounts",
         argvalues=[
-            [0],
-            [5, -5],
-            [4, 0],
+            [uint64(0)],
+            # cheating on type since -5 can't be heald in a proper uint64
+            [uint64(5), -5],
+            [uint64(4), uint64(0)],
         ],
         ids=lambda amounts: ", ".join(str(amount) for amount in amounts),
     )
     async def test_create_coins_with_invalid_amounts_raises(
         self,
-        amounts: List[int],
-        one_wallet_node: SimulatorsAndWallets,
+        self_hostname: str,
+        amounts: List[uint64],
+        simulator_and_wallet: SimulatorsAndWallets,
     ) -> None:
-        [[full_node_api], [[wallet_node, wallet_server]], _] = one_wallet_node
+        [[full_node_api], [[wallet_node, wallet_server]], _] = simulator_and_wallet
 
-        await wallet_server.start_client(PeerInfo("localhost", uint16(full_node_api.server._port)), None)
+        await wallet_server.start_client(PeerInfo(self_hostname, uint16(full_node_api.server._port)), None)
 
         # Avoiding an attribute hint issue below.
         assert wallet_node.wallet_state_manager is not None
